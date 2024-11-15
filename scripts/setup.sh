@@ -210,7 +210,7 @@ then
 fi
 
 mv -f /tmp/takserver/$release/tak ./
-chown -R $USER:$USER tak
+chown -R $(id -u):$(id -u) tak
 
 # Not needed since they fixed the crappy configs in 5.x
 
@@ -249,7 +249,7 @@ sed -i "s/takserver.jks/$IP.jks/g" tak/CoreConfig.xml
 read -p "Enter the amount of memory to allocate, in kB. Default 4000000 (4GB): " mem
 if [ -z "$mem" ];
 then
-	mem="4000000"
+	mem="8000000"
 fi
 
 sed -i "s%\`awk '/MemTotal/ {print \$2}' /proc/meminfo\`%$mem%g" tak/setenv.sh
@@ -300,7 +300,11 @@ EOF
 sed -i -e 's/COUNTRY=US/COUNTRY=${COUNTRY:-US}/' $PWD/tak/certs/cert-metadata.sh
 
 ### Runs through setup, starts both containers
+export UID=$(id -u) GID=$(id -g)
+
+sudo chown -R $(id -u):$(id -g) ./tak
 $DOCKER_COMPOSE --file $DOCKERFILE up  --force-recreate -d
+
 
 ### Checking if the container is set up and ready to set the certificates
 
@@ -308,17 +312,22 @@ while :
 do
 	sleep 10 # let the PG stderr messages conclude...
 	printf $warning "------------CERTIFICATE GENERATION--------------\n"
+	sudo chown -R $(id -u):$(id -g) ./tak
 	$DOCKER_COMPOSE exec tak bash -c "cd /opt/tak/certs && ./makeRootCa.sh --ca-name CRFtakserver"
 	if [ $? -eq 0 ];
 	then
+		sudo chown -R $(id -u):$(id -g) ./tak
 		$DOCKER_COMPOSE exec tak bash -c "cd /opt/tak/certs && ./makeCert.sh server $IP"
 		if [ $? -eq 0 ];
 		then
+			sudo chown -R $(id -u):$(id -g) ./tak
 			$DOCKER_COMPOSE exec tak bash -c "cd /opt/tak/certs && ./makeCert.sh client $user"	
 			if [ $? -eq 0 ];
 			then
 				# Set permissions so user can write to certs/files
-				$DOCKER_COMPOSE exec tak bash -c "useradd $USER && chown -R $USER:$USER /opt/tak/certs/"
+				sudo chown -R $(id -u):$(id -g) ./tak
+				$DOCKER_COMPOSE exec tak bash -c "useradd $USER && chown -R $(id -u):$(id -g) /opt/tak/certs/"
+				sudo chown -R $(id -u):$(id -g) ./tak
 				$DOCKER_COMPOSE stop tak
 				break
 			else 
@@ -333,6 +342,7 @@ done
 printf $info "Creating certificates for 2 users in tak/certs/files for a quick setup via TAK's import function\n"
 
 # Make 2 users
+sudo chown -R $(id -u):$(id -g) ./tak
 cd tak/certs
 ./makeCert.sh client user1
 ./makeCert.sh client user2
@@ -351,12 +361,15 @@ sleep 10
 while :
 do
 	sleep 10
+	sudo chown -R $(id -u):$(id -g) ./tak
 	$DOCKER_COMPOSE exec tak bash -c "cd /opt/tak/ && java -jar /opt/tak/utils/UserManager.jar usermod -A -p $password $user"
 	if [ $? -eq 0 ];
 	then
+		sudo chown -R $(id -u):$(id -g) ./tak
 		$DOCKER_COMPOSE exec tak bash -c "cd /opt/tak/ && java -jar utils/UserManager.jar certmod -A certs/files/$user.pem"
 		if [ $? -eq 0 ]; 
 		then
+			sudo chown -R $(id -u):$(id -g) ./tak
 			$DOCKER_COMPOSE exec tak bash -c "java -jar /opt/tak/db-utils/SchemaManager.jar upgrade"
 			if [ $? -eq 0 ];
 			then
@@ -373,6 +386,7 @@ do
 	fi
 done
 
+sudo chown -R $(id -u):$(id -g) ./tak
 cp ./tak/certs/files/$user.p12 .
 
 ### Post-installation message to user including randomly generated passwrods to use for account and PostgreSQL
