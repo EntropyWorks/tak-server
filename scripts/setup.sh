@@ -148,7 +148,9 @@ main() {
     setup_docker "$docker_compose_file"
 
     local ip
-    ip=$(hostname -I | awk '{print $1}')
+    local nic
+    nic=$(route | grep default | awk '{print $8}' | head -n 1)
+    ip=$(ip addr show $nic | grep -m 1 "inet " | awk '{print $2}' | cut -d "/" -f1)
     log_message "info" "Using IP address: $ip"
     generate_certificates "$ip"
 
